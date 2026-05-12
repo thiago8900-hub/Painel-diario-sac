@@ -1,40 +1,58 @@
 export default async function handler(req, res) {
+  const clientId = process.env.ZOHO_CLIENT_ID?.trim();
+  const clientSecret = process.env.ZOHO_CLIENT_SECRET?.trim();
+  const refreshToken = process.env.ZOHO_REFRESH_TOKEN?.trim();
+  const orgId = process.env.ZOHO_ORG_ID?.trim();
+
   try {
-    // 1. Tenta autenticar no servidor GLOBAL (.com) pois seu Client ID é de lá
-    const tokenUrl = `https://accounts.zoho.com/oauth/v2/token?refresh_token=${process.env.ZOHO_REFRESH_TOKEN}&client_id=${process.env.ZOHO_CLIENT_ID}&client_secret=${process.env.ZOHO_CLIENT_SECRET}&grant_type=refresh_token`;
-    
-    const tokenResponse = await fetch(tokenUrl, { method: 'POST' });
+    // PASSO 1: Tentar pegar o Access Token no servidor GLOBAL
+    const tokenUrl = `https://accounts.zoho.com/oauth/v2/token`;
+    const tokenResponse = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'refresh_token'
+      })
+    });
+
     const tokenData = await tokenResponse.json();
 
     if (!tokenData.access_token) {
-      return res.status(401).json({ 
-        erro: "O Zoho Global recusou seu Token", 
-        ajuda: "Verifique se o seu Refresh Token foi gerado no console .com",
-        detalhes: tokenData 
-      });
+      return res.status(401).json({ etapa: "Erro no Token", resposta: tokenData });
     }
 
-    // 2. Com o token na mão, busca os dados no Desk BRASIL (.com.br)
-    const deskUrl = `https://desk.zoho.com.br/api/v1/tickets?include=count`;
-    
-    const response = await fetch(deskUrl, {
+    // PASSO 2: Tentar buscar os dados no servidor BRASIL
+    const deskUrl = `https://desk.zoho.com.br/api/v1/ticketsCount`;
+    const deskResponse = await fetch(deskUrl, {
       method: 'GET',
       headers: {
-        'orgId': process.env.ZOHO_ORG_ID.trim(),
+        'orgId': orgId,
         'Authorization': `Zoho-oauthtoken ${tokenData.access_token}`
       }
     });
 
-    const data = await response.json();
+    if (!deskResponse.ok) {
+      const erroTexto = await deskResponse.text();
+      return res.status(deskResponse.status).json({ etapa: "Erro no Desk", detalhes: erroTexto });
+    }
 
-    // 3. Resultado para o painel
-    res.status(200).json({
-      total: data.count || 0,
-      abertos: data.count || 0,
-      aguardando: 0
+    const data = await deskResponse.json();
+
+    return res.status(200).json({
+      total: data.allTicketsCount || 0,
+      abertos: data.openTicketsCount || 0,
+      aguardando: data.onHoldTicketsCount || 0
     });
 
   } catch (error) {
-    res.status(500).json({ erro: "Erro de Conexão", detalhes: error.message });
+    // Se cair aqui, é um erro de rede (DNS, bloqueio ou URL errada)
+    return res.status(500).json({ 
+      etapa: "Falha de Rede", 
+      mensagem: error.message,
+      dica: "Verifique se as URLs da Zoho estão acessíveis"
+    });
   }
 }
