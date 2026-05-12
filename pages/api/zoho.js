@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     const accessToken = tokenData.access_token;
 
     // 2. Busca a contagem de tickets (Servidor .com.br)
-    const response = await fetch(`https://desk.zoho.com.br/api/v1/ticketsCount`, {
+    const response = await fetch(`https://desk.zoho.com.br/api/v1/tickets?include=count`, {
       headers: {
         'orgId': process.env.ZOHO_ORG_ID,
         'Authorization': `Zoho-oauthtoken ${accessToken}`
