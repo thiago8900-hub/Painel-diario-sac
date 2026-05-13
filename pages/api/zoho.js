@@ -2,27 +2,21 @@ let cachedToken = null;
 let tokenExpiry = 0;
 
 export default async function handler(req, res) {
-  // Pega as variáveis e garante que elas existem antes de tentar limpar espaços
-  const rt = process.env.ZOHO_REFRESH_TOKEN || "";
-  const ci = process.env.ZOHO_CLIENT_ID || "";
-  const cs = process.env.ZOHO_CLIENT_SECRET || "";
-  const oi = process.env.ZOHO_ORG_ID || "";
-
-  if (!rt || !ci || !cs || !oi) {
-    return res.status(500).json({ 
-      etapa: "Configuração", 
-      mensagem: "Uma das variáveis (Token, ID, Secret ou OrgID) não foi encontrada na Vercel." 
-    });
-  }
+  const rt = (process.env.ZOHO_REFRESH_TOKEN || "").trim();
+  const ci = (process.env.ZOHO_CLIENT_ID || "").trim();
+  const cs = (process.env.ZOHO_CLIENT_SECRET || "").trim();
+  const oi = (process.env.ZOHO_ORG_ID || "").trim();
 
   try {
     if (!cachedToken || Date.now() > tokenExpiry) {
+      // Forçamos a chamada para o ACCOUNTS global (.com) pois seu ClientID é de lá
       const tokenResponse = await fetch(`https://accounts.zoho.com/oauth/v2/token`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          refresh_token: rt.trim(),
-          client_id: ci.trim(),
-          client_secret: cs.trim(),
+          refresh_token: rt,
+          client_id: ci,
+          client_secret: cs,
           grant_type: 'refresh_token'
         })
       });
@@ -37,21 +31,29 @@ export default async function handler(req, res) {
       tokenExpiry = Date.now() + 3000000;
     }
 
+    // Chamada para o DESK Brasil (.com.br)
     const deskResponse = await fetch(`https://desk.zoho.com.br/api/v1/ticketsCount`, {
+      method: 'GET',
       headers: {
-        'orgId': oi.trim(),
-        'Authorization': `Zoho-oauthtoken ${cachedToken}`
+        'orgId': oi,
+        'Authorization': `Zoho-oauthtoken ${cachedToken}`,
+        'Content-Type': 'application/json'
       }
     });
 
     const data = await deskResponse.json();
-    res.status(200).json({
+    
+    return res.status(200).json({
       total: data.allTicketsCount || 0,
       abertos: data.openTicketsCount || 0,
       aguardando: data.onHoldTicketsCount || 0
     });
 
   } catch (error) {
-    res.status(500).json({ etapa: "Falha Geral", mensagem: error.message });
+    return res.status(500).json({ 
+      etapa: "Falha de Rede", 
+      mensagem: error.message,
+      detalhes: "A Vercel não conseguiu alcançar os servidores da Zoho. Verifique se as URLs estão corretas." 
+    });
   }
 }
