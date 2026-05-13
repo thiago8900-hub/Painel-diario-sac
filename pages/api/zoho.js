@@ -2,15 +2,27 @@ let cachedToken = null;
 let tokenExpiry = 0;
 
 export default async function handler(req, res) {
+  // Pega as variáveis e garante que elas existem antes de tentar limpar espaços
+  const rt = process.env.ZOHO_REFRESH_TOKEN || "";
+  const ci = process.env.ZOHO_CLIENT_ID || "";
+  const cs = process.env.ZOHO_CLIENT_SECRET || "";
+  const oi = process.env.ZOHO_ORG_ID || "";
+
+  if (!rt || !ci || !cs || !oi) {
+    return res.status(500).json({ 
+      etapa: "Configuração", 
+      mensagem: "Uma das variáveis (Token, ID, Secret ou OrgID) não foi encontrada na Vercel." 
+    });
+  }
+
   try {
-    // Só pede token novo se o anterior tiver mais de 50 minutos
     if (!cachedToken || Date.now() > tokenExpiry) {
       const tokenResponse = await fetch(`https://accounts.zoho.com/oauth/v2/token`, {
         method: 'POST',
         body: new URLSearchParams({
-          refresh_token: process.env.ZOHO_REFRESH_TOKEN.trim(),
-          client_id: process.env.ZOHO_CLIENT_ID.trim(),
-          client_secret: process.env.ZOHO_CLIENT_SECRET.trim(),
+          refresh_token: rt.trim(),
+          client_id: ci.trim(),
+          client_secret: cs.trim(),
           grant_type: 'refresh_token'
         })
       });
@@ -22,12 +34,12 @@ export default async function handler(req, res) {
       }
 
       cachedToken = tokenData.access_token;
-      tokenExpiry = Date.now() + 3000000; // Cache por 50 min
+      tokenExpiry = Date.now() + 3000000;
     }
 
     const deskResponse = await fetch(`https://desk.zoho.com.br/api/v1/ticketsCount`, {
       headers: {
-        'orgId': process.env.ZOHO_ORG_ID.trim(),
+        'orgId': oi.trim(),
         'Authorization': `Zoho-oauthtoken ${cachedToken}`
       }
     });
