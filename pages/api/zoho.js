@@ -6,10 +6,10 @@ export default async function handler(req, res) {
   const ci = (process.env.ZOHO_CLIENT_ID || "").trim();
   const cs = (process.env.ZOHO_CLIENT_SECRET || "").trim();
   const oi = (process.env.ZOHO_ORG_ID || "").trim();
+  const departmentId = "365059000000006907"; 
 
   try {
     if (!cachedToken || Date.now() > tokenExpiry) {
-      // Forçamos a chamada para o ACCOUNTS global (.com) pois seu ClientID é de lá
       const tokenResponse = await fetch(`https://accounts.zoho.com/oauth/v2/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -31,30 +31,26 @@ export default async function handler(req, res) {
       tokenExpiry = Date.now() + 3000000;
     }
 
-    // Chamada para o DESK Brasil (.com.br)
-   // Substitua o número abaixo pelo ID do Departamento SAC que você copiou
-    const departmentId = "365059000000006907"; 
-
-    const deskResponse = await fetch(`https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}`, {
+    // TENTATIVA 1: Servidor Global
+    let deskResponse = await fetch(`https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}`, {
       method: 'GET',
-      headers: {
-        'orgId': oi,
-        'Authorization': `Zoho-oauthtoken ${cachedToken}`
-      }
+      headers: { 'orgId': oi, 'Authorization': `Zoho-oauthtoken ${cachedToken}` }
     });
 
-    const data = await deskResponse.json();
-    
-    return res.status(200).json({
-      total: data.allTicketsCount || 0,
-      abertos: data.openTicketsCount || 0,
-      aguardando: data.onHoldTicketsCount || 0
-    });
-      }
-    });
+    let data = await deskResponse.json();
 
-    const data = await deskResponse.json();
-    
+    // Se vier zerado, tentamos no Servidor Brasil (o mais provável para o seu caso)
+    if (!data.allTicketsCount || data.allTicketsCount === 0) {
+      const deskResponseBR = await fetch(`https://desk.zoho.com.br/api/v1/ticketsCount?departmentId=${departmentId}`, {
+        method: 'GET',
+        headers: { 'orgId': oi, 'Authorization': `Zoho-oauthtoken ${cachedToken}` }
+      });
+      const dataBR = await deskResponseBR.json();
+      if (dataBR.allTicketsCount !== undefined) {
+        data = dataBR;
+      }
+    }
+
     return res.status(200).json({
       total: data.allTicketsCount || 0,
       abertos: data.openTicketsCount || 0,
@@ -63,9 +59,8 @@ export default async function handler(req, res) {
 
   } catch (error) {
     return res.status(500).json({ 
-      etapa: "Falha de Rede", 
-      mensagem: error.message,
-      detalhes: "A Vercel não conseguiu alcançar os servidores da Zoho. Verifique se as URLs estão corretas." 
+      etapa: "Falha Geral", 
+      mensagem: error.message 
     });
   }
 }
