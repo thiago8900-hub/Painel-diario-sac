@@ -32,12 +32,24 @@ export default async function handler(req, res) {
     }
 
     // Chamada para o DESK Brasil (.com.br)
-    const deskResponse = await fetch(`https://desk.zoho.com/api/v1/ticketsCount`, {
+   // Substitua o número abaixo pelo ID do Departamento SAC que você copiou
+    const departmentId = "365059000000006907"; 
+
+    const deskResponse = await fetch(`https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}`, {
       method: 'GET',
       headers: {
         'orgId': oi,
-        'Authorization': `Zoho-oauthtoken ${cachedToken}`,
-        'Content-Type': 'application/json'
+        'Authorization': `Zoho-oauthtoken ${cachedToken}`
+      }
+    });
+
+    const data = await deskResponse.json();
+    
+    return res.status(200).json({
+      total: data.allTicketsCount || 0,
+      abertos: data.openTicketsCount || 0,
+      aguardando: data.onHoldTicketsCount || 0
+    });
       }
     });
 
