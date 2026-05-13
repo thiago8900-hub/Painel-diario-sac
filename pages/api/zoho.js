@@ -34,7 +34,7 @@ export default async function handler(req, res) {
 
     // 2. Busca de dados (Forçando o .com global)
     // Usamos o endpoint de tickets comum, que é mais estável que o ticketsCount para algumas contas
-    const deskUrl = `https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}`;
+    const deskUrl = https://desk.zoho.com/api/v1/ticketsCount;
     
     const deskResponse = await fetch(deskUrl, {
       method: 'GET',
