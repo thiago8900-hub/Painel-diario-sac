@@ -32,7 +32,7 @@ export default async function handler(req, res) {
     }
 
     // Chamada para o DESK Brasil (.com.br)
-    const deskResponse = await fetch(`https://desk.zoho.com.br/api/v1/ticketsCount`, {
+    const deskResponse = await fetch(`https://desk.zoho.com/api/v1/ticketsCount`, {
       method: 'GET',
       headers: {
         'orgId': oi,
