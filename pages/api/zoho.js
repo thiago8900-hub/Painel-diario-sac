@@ -25,7 +25,7 @@ export default async function handler(req, res) {
       tokenExpiry = Date.now() + 3000000;
     }
 
-    // Chamada para listar a contagem de tickets por STATUS real
+    // Buscamos a contagem com o parâmetro includeByStatus
     const response = await fetch(
       `https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}&includeByStatus=true`,
       {
@@ -36,15 +36,19 @@ export default async function handler(req, res) {
 
     const data = await response.json();
     
-    // Esse LOG aqui é o mais importante agora! 
-    // Ele vai mostrar no Vercel algo como: { "Aberto": 10, "Em espera": 5 ... }
-    console.log("LISTA REAL DE STATUS:", data.byStatus);
+    // Mapeamento dinâmico para os status em Português
+    const statusMap = data.byStatus || {};
+    
+    // Aqui pegamos qualquer variação de "Aberto" ou "Open"
+    const abertos = statusMap["Aberto"] || statusMap["Em aberto"] || statusMap["Open"] || statusMap["Novo"] || 0;
+    
+    // Aqui pegamos qualquer variação de "Aguardando" ou "On Hold"
+    const aguardando = statusMap["Aguardando"] || statusMap["Em espera"] || statusMap["On Hold"] || statusMap["Pendente"] || 0;
 
-    // Por enquanto, vamos retornar tudo o que ele achar no 'byStatus' 
-    // para você ver no navegador o que o Zoho está respondendo.
     return res.status(200).json({
-      verificacao: data.byStatus || "Nenhum status detalhado encontrado",
-      resumo: data
+      abertos: abertos,
+      aguardando: aguardando,
+      debug: statusMap // Isso vai mostrar todos os nomes reais no seu navegador
     });
 
   } catch (error) {
