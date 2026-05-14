@@ -44,6 +44,8 @@ export default async function handler(req, res) {
 
     const data = await deskResponse.json();
 
+    console.log("Resposta do Zoho:", data);
+
     return res.status(200).json({
       total: data.allTicketsCount || 0,
       abertos: data.openTicketsCount || 0,
