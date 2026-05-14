@@ -46,10 +46,14 @@ export default async function handler(req, res) {
 
     console.log("Resposta do Zoho:", data);
 
+    const data = await deskResponse.json();
+    console.log("Resposta do Zoho:", data); // Mantive o log para segurança
+
+    // O tradutor de campos:
     return res.status(200).json({
-      total: data.allTicketsCount || 0,
-      abertos: data.openTicketsCount || 0,
-      aguardando: data.onHoldTicketsCount || 0
+      total: data.allTicketsCount || data.count || 0,
+      abertos: data.openTicketsCount || data.openCount || 0,
+      aguardando: data.onHoldTicketsCount || data.onHoldCount || 0
     });
 
   } catch (error) {
