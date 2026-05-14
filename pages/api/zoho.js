@@ -34,7 +34,7 @@ export default async function handler(req, res) {
 
     // 2. Buscar Contagem de Tickets (Usando .com para evitar Fetch Failed)
    // Tentativa com a URL do Data Center Brasileiro de forma explícita
-    const deskResponse = await fetch(`https://desk.zoho.com.br/api/v1/ticketsCount?departmentId=${departmentId}`, {
+    const deskResponse = await fetch(`https://desk.zoho.eu/api/v1/ticketsCount?departmentId=${departmentId}`, {
       method: "GET",
       headers: {
         "orgId": oi,
