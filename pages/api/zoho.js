@@ -41,16 +41,6 @@ export default async function handler(req, res) {
       }
     });
 
-    const data = await deskResponse.json();
-    console.log("Resposta final do Zoho:", data);
-
-    // O "tradutor" que vai garantir que o painel mostre os números
-    return res.status(200).json({
-      total: data.count || data.allTicketsCount || 0,
-      abertos: data.openCount || data.openTicketsCount || 0,
-      aguardando: data.onHoldCount || data.onHoldTicketsCount || 0
-    });
-
   } catch (error) {
     return res.status(500).json({ 
       etapa: "Erro Final", 
