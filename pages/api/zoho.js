@@ -9,6 +9,7 @@ export default async function handler(req, res) {
   const departmentId = "365059000000006907";
 
   try {
+    // 1. Renovação do Token (Mantido, mas com URL .com explícita)
     if (!cachedToken || Date.now() > tokenExpiry) {
       const tokenResponse = await fetch("https://accounts.zoho.com/oauth/v2/token", {
         method: "POST",
@@ -21,34 +22,46 @@ export default async function handler(req, res) {
         })
       });
       const tokenData = await tokenResponse.json();
+      
+      if (!tokenData.access_token) throw new Error("Falha ao obter access_token");
+      
       cachedToken = tokenData.access_token;
-      tokenExpiry = Date.now() + 3000000;
+      tokenExpiry = Date.now() + 3500000; // ~58 minutos
     }
 
-    // Buscamos a contagem com o parâmetro includeByStatus
+    // 2. Chamada para a API do Desk (Sempre .com)
     const response = await fetch(
       `https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}&includeByStatus=true`,
       {
         method: "GET",
-        headers: { "orgId": oi, "Authorization": `Zoho-oauthtoken ${cachedToken}` }
+        headers: { 
+          "orgId": oi, 
+          "Authorization": `Zoho-oauthtoken ${cachedToken}` 
+        }
       }
     );
 
     const data = await response.json();
     
-    // Mapeamento dinâmico para os status em Português
-    const statusMap = data.byStatus || {};
+    // 3. Tratamento Robusto dos Status
+    // O Zoho retorna os nomes exatos configurados no seu CRM. 
+    // Vamos normalizar as chaves para evitar erro de Case Sensitive.
+    const rawStatusMap = data.byStatus || {};
+    const statusMap = {};
     
-    // Aqui pegamos qualquer variação de "Aberto" ou "Open"
-    const abertos = statusMap["Aberto"] || statusMap["Em aberto"] || statusMap["Open"] || statusMap["Novo"] || 0;
-    
-    // Aqui pegamos qualquer variação de "Aguardando" ou "On Hold"
-    const aguardando = statusMap["Aguardando"] || statusMap["Em espera"] || statusMap["On Hold"] || statusMap["Pendente"] || 0;
+    Object.keys(rawStatusMap).forEach(key => {
+      statusMap[key.toLowerCase()] = rawStatusMap[key];
+    });
+
+    // Soma de variações comuns (ajuste conforme o nome exato no seu Zoho)
+    const abertos = (statusMap["aberto"] || 0) + (statusMap["open"] || 0) + (statusMap["novo"] || 0);
+    const aguardando = (statusMap["aguardando"] || 0) + (statusMap["on hold"] || 0) + (statusMap["em espera"] || 0) + (statusMap["pendente"] || 0);
 
     return res.status(200).json({
-      abertos: abertos,
-      aguardando: aguardando,
-      debug: statusMap // Isso vai mostrar todos os nomes reais no seu navegador
+      abertos,
+      aguardando,
+      totalGeral: data.allTicketsCount || 0,
+      debug: rawStatusMap // Verifique aqui os nomes reais que o Zoho está enviando
     });
 
   } catch (error) {
