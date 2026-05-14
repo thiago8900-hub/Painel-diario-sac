@@ -2,7 +2,12 @@ let cachedToken = null;
 let tokenExpiry = 0;
 
 export default async function handler(req, res) {
-  // Habilitar CORS caso o seu painel chame direto do front-end
+  // 1. Desativar completamente o Cache (Evita o status 304)
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
+  // Configuração de CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -15,7 +20,7 @@ export default async function handler(req, res) {
   const departmentId = "365059000000006907";
 
   try {
-    // 1. Renovação do Token (Cache seguro de 50 minutos)
+    // Renovação do Token (Cache seguro de 50 minutos)
     if (!cachedToken || Date.now() > tokenExpiry) {
       const tokenResponse = await fetch("https://accounts.zoho.com/oauth/v2/token", {
         method: "POST",
@@ -32,10 +37,10 @@ export default async function handler(req, res) {
       if (!tokenData.access_token) throw new Error("Falha ao obter access_token: " + JSON.stringify(tokenData));
       
       cachedToken = tokenData.access_token;
-      tokenExpiry = Date.now() + 50 * 60 * 1000; // 50 minutos seguros
+      tokenExpiry = Date.now() + 50 * 60 * 1000;
     }
 
-    // 2. Chamada para a API do Desk
+    // Chamada para a API do Desk
     const response = await fetch(
       `https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}&includeByStatus=true`,
       {
@@ -50,12 +55,10 @@ export default async function handler(req, res) {
     const data = await response.json();
     const rawStatusMap = data.byStatus || {};
 
-    // 3. Processamento Dinâmico e Inteligente dos Status
     let abertos = 0;
     let fechados = 0;
     let aguardando = 0;
 
-    // Definições de chaves (sempre em minúsculo para comparar)
     const chavesAberto = ["aberto", "open", "novo", "new"];
     const chavesFechado = ["fechado", "closed", "fechado inatividade"];
 
@@ -68,21 +71,19 @@ export default async function handler(req, res) {
       } else if (chavesFechado.includes(statusMinusculo)) {
         fechados += quantidade;
       } else {
-        // Qualquer status que não seja explicitamente "Aberto" ou "Fechado"
-        // (Ex: Em Atendimento, Aguardando Cliente, Pendente, On Hold, etc)
-        aguardando += quantity;
+        // CORRIGIDO: Agora usa 'quantidade' corretamente
+        aguardando += quantidade; 
       }
     });
 
     const totalGeral = data.allTicketsCount || 0;
 
-    // Retorno limpo para o seu painel, mas mantendo o debug para você checar
     return res.status(200).json({
       abertos,
       aguardando,
       fechados,
       totalGeral,
-      debug: rawStatusMap // Mostra exatamente os nomes que o Zoho está cuspindo
+      debug: rawStatusMap
     });
 
   } catch (error) {
