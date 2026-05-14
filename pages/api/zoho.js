@@ -9,7 +9,6 @@ export default async function handler(req, res) {
   const departmentId = "365059000000006907";
 
   try {
-    // 1. Obter Access Token (Sempre .com)
     if (!cachedToken || Date.now() > tokenExpiry) {
       const tokenResponse = await fetch("https://accounts.zoho.com/oauth/v2/token", {
         method: "POST",
@@ -18,34 +17,34 @@ export default async function handler(req, res) {
           refresh_token: rt,
           client_id: ci,
           client_secret: cs,
-          grant_type: "refresh_token"
+          grant_type: 'refresh_token'
         })
       });
       const tokenData = await tokenResponse.json();
-      if (!tokenData.access_token) return res.status(401).json({ erro: "Token Inválido" });
       cachedToken = tokenData.access_token;
       tokenExpiry = Date.now() + 3000000;
     }
 
-    // 2. Buscar contagem de tickets ABERTOS
-    const openRes = await fetch(`https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}&status=Open`, {
-      method: "GET",
-      headers: { "orgId": oi, "Authorization": `Zoho-oauthtoken ${cachedToken}` }
-    });
-    const openData = await openRes.json();
+    // Chamada para listar a contagem de tickets por STATUS real
+    const response = await fetch(
+      `https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}&includeByStatus=true`,
+      {
+        method: "GET",
+        headers: { "orgId": oi, "Authorization": `Zoho-oauthtoken ${cachedToken}` }
+      }
+    );
 
-    // 3. Buscar contagem de tickets AGUARDANDO (On Hold)
-    const holdRes = await fetch(`https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}&status=On%20Hold`, {
-      method: "GET",
-      headers: { "orgId": oi, "Authorization": `Zoho-oauthtoken ${cachedToken}` }
-    });
-    const holdData = await holdRes.json();
+    const data = await response.json();
+    
+    // Esse LOG aqui é o mais importante agora! 
+    // Ele vai mostrar no Vercel algo como: { "Aberto": 10, "Em espera": 5 ... }
+    console.log("LISTA REAL DE STATUS:", data.byStatus);
 
-    // Retorna os dados para o painel
+    // Por enquanto, vamos retornar tudo o que ele achar no 'byStatus' 
+    // para você ver no navegador o que o Zoho está respondendo.
     return res.status(200).json({
-      abertos: openData.count || 0,
-      aguardando: holdData.count || 0,
-      total: (openData.count || 0) + (holdData.count || 0) // Soma dos dois para teste
+      verificacao: data.byStatus || "Nenhum status detalhado encontrado",
+      resumo: data
     });
 
   } catch (error) {
