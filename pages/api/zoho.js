@@ -32,8 +32,7 @@ export default async function handler(req, res) {
       tokenExpiry = Date.now() + 3000000;
     }
 
-    // 2. Buscar Contagem de Tickets (Usando .com para evitar Fetch Failed)
-   // Tentativa com a URL do Data Center Brasileiro de forma explícita
+    // 2. Buscar Contagem de Tickets
     const deskResponse = await fetch(`https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}`, {
       method: "GET",
       headers: {
@@ -43,17 +42,13 @@ export default async function handler(req, res) {
     });
 
     const data = await deskResponse.json();
+    console.log("Resposta final do Zoho:", data);
 
-    console.log("Resposta do Zoho:", data);
-
-    const data = await deskResponse.json();
-    console.log("Resposta do Zoho:", data); // Mantive o log para segurança
-
-    // O tradutor de campos:
+    // O "tradutor" que vai garantir que o painel mostre os números
     return res.status(200).json({
-      total: data.allTicketsCount || data.count || 0,
-      abertos: data.openTicketsCount || data.openCount || 0,
-      aguardando: data.onHoldTicketsCount || data.onHoldCount || 0
+      total: data.count || data.allTicketsCount || 0,
+      abertos: data.openCount || data.openTicketsCount || 0,
+      aguardando: data.onHoldCount || data.onHoldTicketsCount || 0
     });
 
   } catch (error) {
