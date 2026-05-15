@@ -30,13 +30,13 @@ export default async function handler(req, res) {
         })
       });
       const tokenData = await tokenResponse.json();
-      if (!tokenData.access_token) throw new Error("Falha na autenticação Zoho");
+      if (!tokenData.access_token) throw new Error("Erro de Autenticação: Verifique CLIENT_ID/SECRET");
       
       cachedToken = tokenData.access_token;
-      tokenExpiry = Date.now() + 3000000; // ~50 min
+      tokenExpiry = Date.now() + 3000000;
     }
 
-    // 3. Chamada à API de Contagem (Mais rápida que listar tickets)
+    // 3. Chamada para a API de Contagem (Endpoint super leve)
     const response = await fetch(
       `https://desk.zoho.com/api/v1/ticketsCount?departmentId=${departmentId}&includeByStatus=true`,
       {
@@ -51,15 +51,21 @@ export default async function handler(req, res) {
     const data = await response.json();
     const rawStatusMap = data.byStatus || {};
 
-    // 4. Lógica de Agrupamento (Aprendizado do Antigravity)
+    // 4. Mapeamento Inteligente (Baseado no seu Antigravity e Imagens)
     let contadores = {
       somenteAbertos: 0,
       somenteAguardando: 0
     };
 
-    // Definição dos grupos baseada no seu código anterior
-    const grupoAbertos = ["aberto", "open", "novo", "new", "continuidade sac", "realizar estorno"];
-    const grupoAguardando = ["aguardando", "on hold", "em espera", "pendente", "aguardando emissão de nf pela neosolar", "custom on hold"];
+    // Nomes exatos que o seu Zoho usa (conforme aprendemos)
+    const grupoAbertos = [
+      "aberto", "open", "novo", "new", 
+      "continuidade sac", "realizar estorno"
+    ];
+    const grupoAguardando = [
+      "aguardando", "on hold", "em espera", "pendente", 
+      "aguardando emissão de nf pela neosolar", "custom on hold"
+    ];
 
     Object.keys(rawStatusMap).forEach(statusOriginal => {
       const statusFormatado = statusOriginal.toLowerCase().trim();
@@ -70,15 +76,14 @@ export default async function handler(req, res) {
       } else if (grupoAguardando.includes(statusFormatado)) {
         contadores.somenteAguardando += quantidade;
       }
-      // Status que não estão nesses grupos (como "Fechado") são ignorados aqui
     });
 
-    // 5. Resposta Final para o seu Painel
+    // 5. Retorno Simplificado para o Painel
     return res.status(200).json({
       totaisAbertoAguardando: contadores.somenteAbertos + contadores.somenteAguardando,
       somenteAbertos: contadores.somenteAbertos,
       somenteAguardando: contadores.somenteAguardando,
-      debug: rawStatusMap // Útil para validar se algum status novo apareceu
+      statusDisponiveis: rawStatusMap // Isso ajuda você a conferir os nomes
     });
 
   } catch (error) {
