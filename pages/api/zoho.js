@@ -59,8 +59,8 @@ export default async function handler(req, res) {
     let fechados = 0;
     let aguardando = 0;
 
-    const chavesAberto = ["aberto", "open", "novo", "new"];
-    const chavesFechado = ["fechado", "closed", "fechado inatividade"];
+    const abertos = statusMap["Open"] || 0;
+   const aguardando = statusMap["On Hold"] || 0;
 
     Object.keys(rawStatusMap).forEach(statusOriginal => {
       const statusMinusculo = statusOriginal.toLowerCase().trim();
