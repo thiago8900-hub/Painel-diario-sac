@@ -44,10 +44,14 @@ export default async function handler(req, res) {
 
     // 2. Busca de Tickets com tratamento de resposta
     const fetchZoho = async (status) => {
-        const response = await fetch(
-            `https://desk.zoho.com/api/v1/tickets?departmentId=${departmentId}&status=${status}&limit=1`,
-            { headers }
-        );
+    const response = await fetch(
+        `https://desk.zoho.com/api/v1/tickets?status=${status}&limit=1`,
+        { headers }
+    );
+    const data = await response.json();
+    console.log(`Resposta para ${status}:`, JSON.stringify(data)); // Adicione isso aqui
+    return data;
+};
         
         // Se a resposta for vazia ou erro, retorna objeto seguro
         if (!response.ok || response.status === 204) return { count: 0, data: [] };
