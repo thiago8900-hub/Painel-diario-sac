@@ -1,5 +1,4 @@
-// api/zoho.js — Versão Final, agora vai
-
+// api/zoho.js
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -14,49 +13,61 @@ export default async function handler(req, res) {
   const departmentId = process.env.ZOHO_DEPARTMENT_ID || '365059000000006907';
 
   try {
-    // ── 1. Autenticação OAuth2 ──────────────────────────────────────────────
+    // 1. Autenticação OAuth2
     const tokenRes = await fetch('https://accounts.zoho.com/oauth/v2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         refresh_token: rt,
-        client_id:     ci,
+        client_id: ci,
         client_secret: cs,
-        grant_type:    'refresh_token',
+        grant_type: 'refresh_token',
       }),
     });
 
+    // Verificação de erro no Token antes de dar .json()
+    if (!tokenRes.ok) {
+        const errorText = await tokenRes.text();
+        return res.status(401).json({ erro: 'Erro na autenticação Zoho', detalhes: errorText });
+    }
+
     const tokenData = await tokenRes.json();
+    
     if (!tokenData.access_token) {
-      return res.status(401).json({ erro: 'Falha na autenticação OAuth2', detalhes: tokenData });
+      return res.status(401).json({ erro: 'Access Token não recebido', detalhes: tokenData });
     }
 
     const headers = {
-      Authorization: `Zoho-oauthtoken ${tokenData.access_token}`,
-      orgId: oi,
+      'Authorization': `Zoho-oauthtoken ${tokenData.access_token}`,
+      'orgId': oi, // Verifique se esta variável não está vazia no seu .env
     };
 
-    // ── 2. Contar tickets Abertos (statusType=Open) ─────────────────────────
-    // Usa limit=1 — só precisamos do campo "count" no header, não dos dados
-    const [openRes, holdRes] = await Promise.all([
-      fetch(
-        `https://desk.zoho.com/api/v1/tickets?departmentId=${departmentId}&status=open&limit=1`,
-        { headers }
-      ),
-      fetch(
-        `https://desk.zoho.com/api/v1/tickets?departmentId=${departmentId}&status=onhold&limit=1`,
-        { headers }
-      ),
+    // 2. Busca de Tickets com tratamento de resposta
+    const fetchZoho = async (status) => {
+        const response = await fetch(
+            `https://desk.zoho.com/api/v1/tickets?departmentId=${departmentId}&status=${status}&limit=1`,
+            { headers }
+        );
+        
+        // Se a resposta for vazia ou erro, retorna objeto seguro
+        if (!response.ok || response.status === 204) return { count: 0, data: [] };
+        
+        try {
+            return await response.json();
+        } catch (e) {
+            return { count: 0, data: [] };
+        }
+    };
+
+    const [openData, holdData] = await Promise.all([
+      fetchZoho('open'),
+      fetchZoho('onhold')
     ]);
 
-    const openData = await openRes.json();
-    const holdData = await holdRes.json();
-
-    // O Zoho retorna o total no campo "count" fora do array "data"
-    const totalAbertos   = parseInt(openData.count ?? openData.data?.length ?? 0);
+    // O Zoho retorna o total no campo "count"
+    const totalAbertos    = parseInt(openData.count ?? openData.data?.length ?? 0);
     const totalAguardando = parseInt(holdData.count ?? holdData.data?.length ?? 0);
 
-    // ── 3. Resposta final ───────────────────────────────────────────────────
     return res.status(200).json({
       totaisAbertoAguardando: totalAbertos + totalAguardando,
       somenteAbertos:         totalAbertos,
@@ -65,6 +76,6 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    return res.status(500).json({ erro: error.message });
+    return res.status(500).json({ erro: "Erro interno no servidor", mensagem: error.message });
   }
 }
