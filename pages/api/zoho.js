@@ -1,85 +1,86 @@
 // api/zoho.js
+let _cachedToken = null;
+let _tokenExpires = 0;
+
+async function getAccessToken() {
+  if (_cachedToken && Date.now() < _tokenExpires) return _cachedToken;
+
+  const tokenParams = new URLSearchParams({
+    refresh_token: process.env.ZOHO_REFRESH_TOKEN?.trim(),
+    client_id:     process.env.ZOHO_CLIENT_ID?.trim(),
+    client_secret: process.env.ZOHO_CLIENT_SECRET?.trim(),
+    grant_type:    'refresh_token'
+  });
+
+  const tokenRes = await fetch('https://accounts.zoho.com/oauth/v2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: tokenParams
+  });
+
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) throw new Error('Erro Token: ' + JSON.stringify(tokenData));
+
+  _cachedToken = tokenData.access_token;
+  _tokenExpires = Date.now() + 50 * 60 * 1000;
+  return _cachedToken;
+}
+
+async function zohoRequest(path, params, accessToken) {
+  const qs = new URLSearchParams(params).toString();
+  const url = `https://desk.zoho.com/api/v1/${path}?${qs}`;
+  
+  const res = await fetch(url, {
+    headers: {
+      'orgId': process.env.ZOHO_ORG_ID?.trim(),
+      'Authorization': `Zoho-oauthtoken ${accessToken}`
+    }
+  });
+
+  if (res.status === 204) return { data: [] };
+  const text = await res.text();
+  try { return JSON.parse(text); } catch(e) { return { data: [] }; }
+}
+
 export default async function handler(req, res) {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const rt = (process.env.ZOHO_REFRESH_TOKEN || '').trim();
-  const ci = (process.env.ZOHO_CLIENT_ID     || '').trim();
-  const cs = (process.env.ZOHO_CLIENT_SECRET || '').trim();
-  const oi = (process.env.ZOHO_ORG_ID        || '').trim();
-  const departmentId = process.env.ZOHO_DEPARTMENT_ID || '365059000000006907';
-
   try {
-    // 1. Autenticação OAuth2
-    const tokenRes = await fetch('https://accounts.zoho.com/oauth/v2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        refresh_token: rt,
-        client_id: ci,
-        client_secret: cs,
-        grant_type: 'refresh_token',
-      }),
-    });
-
-    // Verificação de erro no Token antes de dar .json()
-    if (!tokenRes.ok) {
-        const errorText = await tokenRes.text();
-        return res.status(401).json({ erro: 'Erro na autenticação Zoho', detalhes: errorText });
-    }
-
-    const tokenData = await tokenRes.json();
+    const accessToken = await getAccessToken();
+    const SAC_DEPT = '365059000000006907';
     
-    if (!tokenData.access_token) {
-      return res.status(401).json({ erro: 'Access Token não recebido', detalhes: tokenData });
-    }
+    // Status que você considera como "Fechado" no seu Zoho
+    const CLOSED_STATUSES = ['Fechado', 'Fechado Inatividade', 'Closed'];
 
-    const headers = {
-      'Authorization': `Zoho-oauthtoken ${tokenData.access_token}`,
-      'orgId': oi, // Verifique se esta variável não está vazia no seu .env
-    };
-
-    // 2. Busca de Tickets com tratamento de resposta
-    const fetchZoho = async (status) => {
-    const response = await fetch(
-        `https://desk.zoho.com/api/v1/tickets?status=${status}&limit=1`,
-        { headers }
-    );
-    const data = await response.json();
-    console.log(`Resposta para ${status}:`, JSON.stringify(data)); // Adicione isso aqui
-    return data;
-};
-        
-        // Se a resposta for vazia ou erro, retorna objeto seguro
-        if (!response.ok || response.status === 204) return { count: 0, data: [] };
-        
-        try {
-            return await response.json();
-        } catch (e) {
-            return { count: 0, data: [] };
-        }
-    };
-
-    const [openData, holdData] = await Promise.all([
-      fetchZoho('open'),
-      fetchZoho('onhold')
+    // 1. Pegar Tickets Abertos (StatusType = Open ou On Hold)
+    // Em vez de baixar 5000 tickets, usamos o filtro oficial do Zoho por "statusType"
+    const [openRes, holdRes] = await Promise.all([
+      zohoRequest('tickets', { departmentId: SAC_DEPT, statusType: 'Open', limit: 100 }, accessToken),
+      zohoRequest('tickets', { departmentId: SAC_DEPT, statusType: 'On Hold', limit: 100 }, accessToken)
     ]);
 
-    // O Zoho retorna o total no campo "count"
-    const totalAbertos    = parseInt(openData.count ?? openData.data?.length ?? 0);
-    const totalAguardando = parseInt(holdData.count ?? holdData.data?.length ?? 0);
+    const openTickets = openRes.data || [];
+    const holdTickets = holdRes.data || [];
 
+    // 2. Filtrar para garantir que não venha nada de outro departamento (segurança)
+    const somenteAbertos = openTickets.filter(t => !CLOSED_STATUSES.includes(t.status)).length;
+    const somenteAguardando = holdTickets.filter(t => !CLOSED_STATUSES.includes(t.status)).length;
+
+    // 3. Retorno simplificado para o seu Dashboard
     return res.status(200).json({
-      totaisAbertoAguardando: totalAbertos + totalAguardando,
-      somenteAbertos:         totalAbertos,
-      somenteAguardando:      totalAguardando,
-      atualizadoEm:           new Date().toISOString(),
+      totaisAbertoAguardando: somenteAbertos + somenteAguardando,
+      somenteAbertos: somenteAbertos,
+      somenteAguardando: somenteAguardando,
+      atualizadoEm: new Date().toISOString(),
+      // Remova a linha abaixo se não quiser listar os tickets
+      debug: { totalProcessado: openTickets.length + holdTickets.length }
     });
 
-  } catch (error) {
-    return res.status(500).json({ erro: "Erro interno no servidor", mensagem: error.message });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ erro: err.message });
   }
 }
