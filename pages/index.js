@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react';
 
 export default function Dashboard() {
-  const [dados, setDados] = useState({ total: 0, abertos: 0, aguardando: 0 });
+  // Inicializa o estado com as chaves corretas combinando com a API
+  const [dados, setDados] = useState({ totalGeral: 0, abertos: 0, aguardando: 0 });
 
-  // Função que busca os dados da nossa API acima
   const atualizarDados = async () => {
-    const res = await fetch('/api/zoho');
-    const json = await res.json();
-    setDados(json);
+    try {
+      const res = await fetch('/api/zoho');
+      const json = await res.json();
+      
+      // Se a API retornar um erro estrutural, evita quebrar o estado do componente
+      if (json && !json.erro) {
+        setDados(json);
+      } else {
+        console.error("Erro retornado pela API do Zoho:", json.erro);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar dados na rota local:", error);
+    }
   };
 
   useEffect(() => {
@@ -21,19 +31,20 @@ export default function Dashboard() {
       <h1>Painel de Operação SAC</h1>
       <div style={{ display: 'flex', gap: '20px', marginTop: '40px' }}>
         
+        {/* CORRIGIDO: mudado de dados.total para dados.totalGeral */}
         <div style={cardStyle("#333")}>
           <h2>Total de Tickets</h2>
-          <p style={numberStyle}>{dados.total}</p>
+          <p style={numberStyle}>{dados.totalGeral ?? 0}</p> 
         </div>
 
         <div style={cardStyle("#e74c3c")}>
           <h2>Em Aberto</h2>
-          <p style={numberStyle}>{dados.abertos}</p>
+          <p style={numberStyle}>{dados.abertos ?? 0}</p>
         </div>
 
         <div style={cardStyle("#f1c40f")}>
           <h2>Aguardando</h2>
-          <p style={numberStyle}>{dados.aguardando}</p>
+          <p style={numberStyle}>{dados.aguardando ?? 0}</p>
         </div>
 
       </div>
